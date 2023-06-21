@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"modules/internal/goods"
+	"modules/internal/entities"
 	"modules/pkg/dbclient"
 	"modules/pkg/logger"
-	"strings"
+	"modules/utils"
 
 	"github.com/jackc/pgconn"
 )
 
 type Storage interface {
-	CreateNewGood(ctx context.Context, g goods.Product) error
-	CreateWarehouse(ctx context.Context, warehouse goods.Stock) error
+	CreateNewGood(ctx context.Context, g entities.Good) error
+	CreateWarehouse(ctx context.Context, warehouse entities.Stock) error
 
-	AddGood(ctx context.Context, code string, stock string, value int) error
+	AddGood(ctx context.Context, code string, stockId string, value int) error
 
 	ReserveGood(ctx context.Context, code int, stockId int, value int) error
 	CancelGoodReserve(ctx context.Context, code int, stockId int, value int) error
@@ -34,15 +34,12 @@ func NewRepository(client dbclient.Client, logger *logger.Logger) Storage {
 	}
 }
 
-func FormatQuery(q string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(q, "\t", ""), "\n", " ")
-}
-
-func (d *db) CreateNewGood(ctx context.Context, g goods.Product) error {
+// CreateNewGood cоздает новый типа товара
+func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
 	var pgErr *pgconn.PgError
 	var errQ error
 
-	// Для создания нового типа продукта, треубется проверить, существует ли данный продукт на складе
+	// Проверяем, существует ли данный продукт на складе
 	var exist bool
 	if err := d.client.QueryRow(ctx,
 		`select case when (select * from goods where code = $1) is not null 
@@ -51,7 +48,7 @@ func (d *db) CreateNewGood(ctx context.Context, g goods.Product) error {
 		return err
 	}
 
-	// Если запись по коду найдена - логируем и возвращаем ошибку
+	// Если запись по коду товара найдена - логируем и возвращаем ошибку
 	if exist {
 		exErr := "error! Указанный код нового продукта существует на складе"
 		d.logger.Error(exErr)
@@ -60,7 +57,7 @@ func (d *db) CreateNewGood(ctx context.Context, g goods.Product) error {
 
 	// Исполняем запрос по добавлению нового товара + проверяем на всевозможные ошибки и логируем
 	q := `insert into goods (name, code, size, value) values ($1, $2, $3, $4)`
-	d.logger.Trace(fmt.Sprintf("SQL Query: %s", FormatQuery(q)))
+	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
 	_, errQ = d.client.Exec(ctx, q, g.Name, g.Code, g.Size, g.Value)
 
@@ -71,13 +68,16 @@ func (d *db) CreateNewGood(ctx context.Context, g goods.Product) error {
 		return newErr
 	}
 
-	d.logger.Trace("the new product has been successfully added to the database")
+	d.logger.Trace("the new good has been successfully added to the database")
 	return nil
 }
 
-func (d *db) CreateWarehouse(ctx context.Context, warehouse goods.Stock) error { return nil }
+func (d *db) CreateWarehouse(ctx context.Context, warehouse entities.Stock) error { return nil }
 
-func (d *db) AddGood(ctx context.Context, code string, stock string, value int) error { return nil }
+// AddGood получает данные по товару и добавляет их на склад
+func (d *db) AddGood(ctx context.Context, code string, stockId string, value int) error {
+	return nil
+}
 
 func (d *db) ReserveGood(ctx context.Context, code int, stockId int, value int) error { return nil }
 func (d *db) CancelGoodReserve(ctx context.Context, code int, stockId int, value int) error {

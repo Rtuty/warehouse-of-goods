@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"modules/internal/goods"
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
@@ -18,12 +17,14 @@ func init() {
 	}
 }
 
+type WarehouseService struct{} // todo json rpc server
+
 func main() {
 	// Создание нового сервера JSON-RPC
 	server := rpc.NewServer()
 
 	// Регистрация сервиса склада
-	err := server.Register(&goods.WarehouseService{})
+	err := server.Register(&WarehouseService{})
 	if err != nil {
 		log.Fatal("Error registering service: ", err)
 	}
