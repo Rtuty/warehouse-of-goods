@@ -56,10 +56,10 @@ func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
 		return errors.New(exErr)
 	}
 
-	q := `insert into goods (name, code, size, value) values ($1, $2, $3, $4)` // Создаем запрос по добавлению нового товара + проверяем на всевозможные ошибки и логируем
+	q := `insert into goods (code, name, size, value) values ($1, $2, $3, $4)` // Создаем запрос по добавлению нового товара + проверяем на всевозможные ошибки и логируем
 	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
-	_, errQ = d.client.Exec(ctx, q, g.Name, g.Code, g.Size, g.Value) // FAQ Метод Exec использовать для исполнения запросов, которые не возвращают данных update|delete|insert. Метод Query использовать для исполнения и возврата (select)
+	_, errQ = d.client.Exec(ctx, q, g.Code, g.Name, g.Size, g.Value) // FAQ Метод Exec использовать для исполнения запросов, которые не возвращают данных update|delete|insert. Метод Query использовать для исполнения и возврата (select)
 
 	if errors.Is(errQ, pgErr) {
 		pgErr = errQ.(*pgconn.PgError)
@@ -132,7 +132,7 @@ func (d *db) CancelGoodReserve(ctx context.Context, code int, stockId int, value
 
 // checkDbDublicate проверяет на дубликаты в БД, при создании нового товара или скалада
 func checkDbDublicate(arg string, dbName string, ctx context.Context, c dbclient.Client) (bool, error) {
-	var query string
+	var query string = "select exists (select 1 from "
 	var exist bool
 
 	if arg == "" {
@@ -141,12 +141,14 @@ func checkDbDublicate(arg string, dbName string, ctx context.Context, c dbclient
 
 	switch dbName {
 	case "goods":
-		query = "select case when (select * from goods where code::text = '$1'::text) is not null then true else false end"
+		query = query + "goods where code::text"
 	case "stocks":
-		query = "select case when (select * from stocks where name::text = '$1'::text) is not null then true else false end"
+		query = query + "stocks where name::text"
 	default:
 		return false, errors.New("database was not specified in the arguments of the function")
 	}
+
+	query = query + "=$1::text)"
 
 	if err := c.QueryRow(ctx, query, arg).Scan(&exist); err != nil {
 		return false, err

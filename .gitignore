@@ -2,3 +2,4 @@ go.sum
 go.mod
 README.md
 .env
+/logs

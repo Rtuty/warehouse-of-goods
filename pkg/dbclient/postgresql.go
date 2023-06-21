@@ -2,7 +2,7 @@ package dbclient
 
 import (
 	"fmt"
-	"log"
+	"modules/pkg/logger"
 	"modules/utils"
 	"os"
 	"reflect"
@@ -26,9 +26,7 @@ type Client interface {
 Для подключения к postgresql, достаем переменные окружения из файла .env
 Если все переменные существуют и иметют значение -> записываем в структуру подключения Pstgcon
 */
-type dataSource struct {
-	Host, Port, User, Passwd, Dbname, Sslmode string
-}
+type dataSource struct{ Host, Port, User, Passwd, Dbname, Sslmode string }
 
 var PstgCon dataSource
 
@@ -50,10 +48,9 @@ func GetConnection() {
 			}
 		}
 	}
-	fmt.Println(PstgCon)
 }
 
-func NewClient(ctx context.Context, maxAttempts int, cn dataSource) (pool *pgxpool.Pool, err error) {
+func NewClient(ctx context.Context, maxAttempts int, cn dataSource, log *logger.Logger) (pool *pgxpool.Pool, err error) {
 	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", cn.User, cn.Passwd, cn.Host, cn.Port, cn.Dbname)
 	err = utils.DoWithTries(func() error {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
