@@ -56,10 +56,10 @@ func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
 		return errors.New(exErr)
 	}
 
-	q := `insert into goods (name, code, size, value) values ($1, $2, $3, $4)` // Исполняем запрос по добавлению нового товара + проверяем на всевозможные ошибки и логируем
+	q := `insert into goods (name, code, size, value) values ($1, $2, $3, $4)` // Создаем запрос по добавлению нового товара + проверяем на всевозможные ошибки и логируем
 	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
-	_, errQ = d.client.Exec(ctx, q, g.Name, g.Code, g.Size, g.Value)
+	_, errQ = d.client.Exec(ctx, q, g.Name, g.Code, g.Size, g.Value) // FAQ Метод Exec использовать для исполнения запросов, которые не возвращают данных update|delete|insert. Метод Query использовать для исполнения и возврата (select)
 
 	if errors.Is(errQ, pgErr) {
 		pgErr = errQ.(*pgconn.PgError)
@@ -71,6 +71,7 @@ func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
 		mu.Unlock()
 		return newErr
 	}
+
 	mu.Unlock()
 	d.logger.Trace("new good has been successfully added to the database")
 
