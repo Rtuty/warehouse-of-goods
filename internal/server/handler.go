@@ -8,9 +8,9 @@ import (
 )
 
 type Handler struct {
+	ctx context.Context
 	db  db.Storage
 	log *logger.Logger
-	ctx context.Context
 }
 
 func (h *Handler) CreateNewGood(args []entities.Good, resp *[]entities.Good) error {

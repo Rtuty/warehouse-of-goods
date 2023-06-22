@@ -18,7 +18,9 @@ type Storage interface {
 	CreateNewGood(ctx context.Context, g entities.Good) error
 	CreateNewStock(ctx context.Context, s entities.Stock) error
 
-	AddGood(ctx context.Context, code string, stockId string, value int) error
+	GetAllGoods(ctx context.Context) ([]entities.Good, error)
+	GetGoodByCode(ctx context.Context, code string) (entities.Good, error)
+	AddGood(ctx context.Context, code string, stockId string, value int, dynamic bool) error
 
 	ReserveGood(ctx context.Context, code int, stockId int, value int) error
 	CancelGoodReserve(ctx context.Context, code int, stockId int, value int) error
@@ -115,8 +117,54 @@ func (d *db) CreateNewStock(ctx context.Context, s entities.Stock) error {
 	return nil
 }
 
+// Получить все товары со всех складов
+func (d *db) GetAllGoods(ctx context.Context) ([]entities.Good, error) {
+	q := `select code, name, size, value from goods`
+	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
+
+	rows, err := d.client.Query(ctx, q)
+	if err != nil {
+		d.logger.Fatalf("request execution error: %s", err)
+		return nil, err
+	}
+
+	goods := make([]entities.Good, 0)
+
+	for rows.Next() {
+		var g entities.Good
+
+		if err := rows.Scan(&g.Code, &g.Name, &g.Size, &g.Value); err != nil {
+			d.logger.Fatalf("func getAllGoods scan rows error: %s", err)
+			return nil, err
+		}
+
+		goods = append(goods, g)
+	}
+
+	if err := rows.Err(); err != nil {
+		d.logger.Fatalf("error checking failed: %s", err)
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+// Получить товар по его коду
+func (d *db) GetGoodByCode(ctx context.Context, code string) (entities.Good, error) {
+	q := `select code, name, size, value from goods where code = %1`
+	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
+
+	var g entities.Good
+
+	if err := d.client.QueryRow(ctx, q, code).Scan(&g.Code, &g.Name, &g.Size, &g.Value); err != nil {
+		d.logger.Fatalf("request execution error: %s", err)
+		return entities.Good{}, nil
+	}
+	return g, nil
+}
+
 // AddGood получает данные по товару и добавляет их на склад
-func (d *db) AddGood(ctx context.Context, code string, stockId string, value int) error {
+func (d *db) AddGood(ctx context.Context, code string, stockId string, value int, dynamic bool) error { // Параметр dynamic позволяет переносить товар с недоступного склада на доступный
 	return nil
 }
 

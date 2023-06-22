@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
-	"net"
-	"net/rpc"
-	"net/rpc/jsonrpc"
+	"modules/internal/db"
+	"modules/internal/server"
+	"modules/pkg/dbclient"
+	"modules/pkg/logger"
 
 	"github.com/joho/godotenv"
 )
@@ -17,31 +18,15 @@ func init() {
 	}
 }
 
-type WarehouseService struct{} // todo json rpc server
-
 func main() {
-	// Создание нового сервера JSON-RPC
-	server := rpc.NewServer()
+	dbclient.GetConnection()    // Получаем данные для соединением с БД, записывая в сущность PstgCon
+	ctx := context.Background() // Создаем контекст
+	log := logger.GetLogger()   // Создаем логгер
 
-	// Регистрация сервиса склада
-	err := server.Register(&WarehouseService{})
+	cl, err := dbclient.NewClient(ctx, 5, dbclient.PstgCon, log) // Получаем соединение с PostgreSQL
 	if err != nil {
-		log.Fatal("Error registering service: ", err)
+		log.Fatalf("failed to connect PostgreSQL error: %s", err)
 	}
 
-	// Слушаем порт и обслуживаем запросы JSON-RPC
-	l, err := net.Listen("tcp", ":1234")
-	if err != nil {
-		log.Fatal("Error listening: ", err)
-	}
-	defer l.Close()
-
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			log.Fatal("Error accepting: ", err)
-		}
-		fmt.Println("check")
-		go jsonrpc.ServeConn(conn)
-	}
+	server.RunJRPC(ctx, db.NewRepository(cl, log), log) // Запуск JRPC сервера
 }
