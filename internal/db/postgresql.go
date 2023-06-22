@@ -18,10 +18,10 @@ type Storage interface {
 
 	GetAllGoods(ctx context.Context) ([]entities.Good, error)
 	GetGoodByCode(ctx context.Context, code string) (entities.Good, error)
-	AddGood(ctx context.Context, code string, stockId string, value int, dynamic bool) error
+	AddGood(ctx context.Context, code string, stockId string, value int64, dynamic bool) error
 
-	ReserveGood(ctx context.Context, code string, stockId string, value int) error
-	CancelGoodReserve(ctx context.Context, code string, stockId string, value int) error
+	ReservationGood(ctx context.Context, code string, stockId string, value int64) error
+	CancelGoodReservation(ctx context.Context, code string, stockId string, value int64) error
 }
 
 type db struct {

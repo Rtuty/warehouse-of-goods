@@ -11,7 +11,7 @@ import (
 )
 
 // AddGood получает данные по товару и добавляет их на склад
-func (d *db) AddGood(ctx context.Context, code string, stockId string, value int, dynamic bool) error { // Параметр dynamic позволяет переносить товар с недоступного склада на доступный
+func (d *db) AddGood(ctx context.Context, code string, stockId string, value int64, dynamic bool) error { // Параметр dynamic позволяет переносить товар с недоступного склада на доступный
 	if code == "" || stockId == "" || value == 0 {
 		d.logger.Fatal("code, id stock or value is empty")
 		return errors.New("code, id stock or value cannot be empty")
