@@ -41,7 +41,7 @@ func (d *db) GetAllGoods(ctx context.Context) ([]entities.Good, error) {
 
 // GetGoodByCode получает товар по его коду
 func (d *db) GetGoodByCode(ctx context.Context, code string) (entities.Good, error) {
-	q := `select code, name, size, value from goods where code::text = %1`
+	q := `select code, name, size, value from goods where code::text = $1::text`
 	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
 	var g entities.Good
@@ -56,7 +56,9 @@ func (d *db) GetGoodByCode(ctx context.Context, code string) (entities.Good, err
 // GetGoodsCountByStockId возвращает количество всех товаров на складе. Если указан code товара => выводим общее количество конкретного товара
 func (d *db) GetGoodsCountByStockId(ctx context.Context, stockId string, code string) (int64, error) {
 	var count int64
-	q := `select count(value) from goods where stock_id = $1 and available`
+	q := `select sum(value) from goods g
+			inner join stocks s on s.id = g.stock_id
+		  where g.stock_id = $1 and s.available`
 
 	if code != "" {
 		q = q + ` and code::text = $2`

@@ -22,37 +22,42 @@ func (d *db) AddGood(ctx context.Context, code string, stockId string, value int
 	q = `select available from stocks where id::text = $1`
 	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
+	t, err := d.client.Begin(ctx)
+	if err != nil {
+		d.logger.Fatal("couldn't open transaction")
+		return err
+	}
+
 	var s entities.Stock
 
-	mu.Lock()
-	if errQ = d.client.QueryRow(ctx, q, stockId).Scan(&s.Available); errQ != nil { // Получаем статус доступности склада
+	if errQ = t.QueryRow(ctx, q, stockId).Scan(&s.Available); errQ != nil { // Получаем статус доступности склада
 		d.logger.Fatalf("func AddGood query for search stock error %s", errQ)
-		mu.Unlock()
 		return errQ
 	}
 
 	if s.Available { // Если склад доступен, обновляем value в таблице goods
-		q = `update goods set value = $1 where code::text = $2 and stock_id = $3`
+		q = `update goods set value = (select value from goods where code::text = $2::text) + $1 where code::text = $2::text and stock_id = $3`
 		d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
-		_, errQ = d.client.Exec(ctx, q, value, code, stockId)
+		_, errQ = t.Exec(ctx, q, value, code, stockId)
 	} else {
 		switch dynamic {
 		case true: // Если был указан параметр dynamic => находим и возвращаем любой доступный склад (у которого есть товар с таким же кодом)
 			q = `select s.id from stocks s
 							inner join goods g on g.code::text = $1 and g.stock_id = $2
-						where s.id != $3 and s.available limit 1`
+						where s.id != $2 and s.available limit 1`
 
-			if errQ = d.client.QueryRow(ctx, q, code, stockId, stockId).Scan(&s.ID); errQ != nil {
+			if errQ = t.QueryRow(ctx, q, code, stockId).Scan(&s.ID); errQ != nil {
 				d.logger.Fatalf("func AddGood query for get another stock (dynamic case) error %s", errQ)
-				mu.Unlock()
+
 				return errQ
 			}
 
-			q = `update goods set value = $1 where code::text = $2 and stock_id = $3`
+			q = `update goods set value = (select value from goods where code::text = $2::text) + $1 where stock_id = $3` // TODO: Пофиксить запрос
 
-			_, errQ = d.client.Exec(ctx, q, value, code, s.ID) // Если запрос прошел все проверки и новый склад найден => Делаем обновление количества
+			_, errQ = t.Exec(ctx, q, value, code, s.ID) // Если запрос прошел все проверки и новый склад найден => Делаем обновление количества
 		case false:
+			t.Rollback(ctx)
 			return errors.New("failed to add goods to the stock")
 		}
 	}
@@ -64,10 +69,14 @@ func (d *db) AddGood(ctx context.Context, code string, stockId string, value int
 				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
 		)
 		d.logger.Error(newErr)
-		mu.Unlock()
+		t.Rollback(ctx)
+
 		return newErr
 	}
 
-	mu.Unlock()
+	if err := t.Commit(ctx); err != nil {
+		d.logger.Errorf("failed to commit transaction: %s", err)
+		return err
+	}
 	return nil
 }

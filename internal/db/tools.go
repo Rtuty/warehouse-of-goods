@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"modules/pkg/dbclient"
 )
 
@@ -24,9 +25,19 @@ func checkDbDublicate(arg string, dbName string, ctx context.Context, c dbclient
 		return false, errors.New("database was not specified in the arguments of the function")
 	}
 
+	t, err := c.Begin(ctx) // Открываем транзакцию
+	if err != nil {
+		return false, fmt.Errorf("error when creating a transaction: %s", err)
+	}
+
 	query = query + "=$1::text)"
 
-	if err := c.QueryRow(ctx, query, arg).Scan(&exist); err != nil {
+	if err := t.QueryRow(ctx, query, arg).Scan(&exist); err != nil {
+		t.Rollback(ctx)
+		return false, err
+	}
+
+	if err := t.Commit(ctx); err != nil {
 		return false, err
 	}
 

@@ -5,7 +5,6 @@ import (
 	"modules/internal/entities"
 	"modules/pkg/dbclient"
 	"modules/pkg/logger"
-	"sync"
 
 	"github.com/jackc/pgconn"
 )
@@ -38,4 +37,3 @@ func NewRepository(client dbclient.Client, logger *logger.Logger) Storage {
 
 var pgErr *pgconn.PgError
 var errQ error
-var mu sync.Mutex

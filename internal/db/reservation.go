@@ -9,9 +9,7 @@ import (
 	"github.com/jackc/pgconn"
 )
 
-// faq: Таблица резервации. Вычетаем количество из таблицы goods и добавляем его в res_cen (reservation center)
-// Ммм, переписывать буду все функции.
-// Открываем транзацию, чтобы обеспечить более безопасную работу с постгрей
+// faq: Таблица резервации. ReservationGood вычитает количество из таблицы goods и добавляем его в res_cen (reservation center)
 func (d *db) ReservationGood(ctx context.Context, code string, stockId string, value int64) error {
 	if code == "" || stockId == "" || value == 0 {
 		return fmt.Errorf("result: code = %s, stock_id = %s, value = %d. must not be equal to code == '' or stock id == '' or value == 0", code, stockId, value)
@@ -37,31 +35,22 @@ func (d *db) ReservationGood(ctx context.Context, code string, stockId string, v
 		return err
 	}
 
-	mu.Lock()
 	chErr := make(chan error)
-	chDone := make(chan struct{})
 
 	// После исполнения запроса проверяем на ошибки
-	go func(errs <-chan error, done <-chan struct{}) {
-		for {
-			select {
-			case <-errs:
-				for err := range errs {
-					if errors.Is(err, pgErr) {
-						pgErr = errQ.(*pgconn.PgError)
-						newErr := fmt.Errorf(
-							fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
-								pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
-						)
-						d.logger.Error(newErr)
-						t.Rollback(ctx) // Отменяем транзакцию, если есть ошибка
-					}
-				}
-			case <-done:
-				return
+	go func(errs chan error) {
+		for err := range errs { // faq: не нужно проверять на открытость канала, range делает это под капотом, поэтому без select
+			if errors.Is(err, pgErr) {
+				pgErr = errQ.(*pgconn.PgError)
+				newErr := fmt.Errorf(
+					fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
+						pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
+				)
+				d.logger.Error(newErr)
 			}
 		}
-	}(chErr, chDone)
+
+	}(chErr)
 
 	// Вычетаем количество резервируемого товара из таблицы goods
 	q = `update goods set value = (value - $1) where code::text = $2 and stock_id = $3`
@@ -76,15 +65,10 @@ func (d *db) ReservationGood(ctx context.Context, code string, stockId string, v
 	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
 
 	chErr <- errQ
-	chDone <- struct{}{}
-
-	close(chErr)
-	close(chDone)
-	mu.Unlock()
 
 	// Фиксируем транзакцию, если все окей
 	if err := t.Commit(ctx); err != nil {
-		d.logger.Errorf("Failed to commit transaction: %s", err)
+		d.logger.Errorf("failed to commit transaction: %s", err)
 		return err
 	}
 
