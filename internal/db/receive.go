@@ -56,7 +56,7 @@ func (d *db) GetGoodByCode(ctx context.Context, code string) (entities.Good, err
 // GetGoodsCountByStockId возвращает количество всех товаров на складе. Если указан code товара => выводим общее количество конкретного товара
 func (d *db) GetGoodsCountByStockId(ctx context.Context, stockId string, code string) (int64, error) {
 	var count int64
-	q := `select count(value) from goods where stock_id = $1`
+	q := `select count(value) from goods where stock_id = $1 and available`
 
 	if code != "" {
 		q = q + ` and code::text = $2`
