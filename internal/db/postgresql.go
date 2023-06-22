@@ -2,13 +2,9 @@ package db
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"modules/internal/entities"
 	"modules/pkg/dbclient"
 	"modules/pkg/logger"
-	"modules/utils"
-	"strconv"
 	"sync"
 
 	"github.com/jackc/pgconn"
@@ -18,14 +14,14 @@ type Storage interface {
 	CreateNewGood(ctx context.Context, g entities.Good) error
 	CreateNewStock(ctx context.Context, s entities.Stock) error
 
-	GetGoodsCountByStockId(ctx context.Context, stockId string) (count int64, err error)
+	GetGoodsCountByStockId(ctx context.Context, stockId string, code string) (int64, error)
 
 	GetAllGoods(ctx context.Context) ([]entities.Good, error)
 	GetGoodByCode(ctx context.Context, code string) (entities.Good, error)
 	AddGood(ctx context.Context, code string, stockId string, value int, dynamic bool) error
 
-	ReserveGood(ctx context.Context, code int, stockId int, value int) error
-	CancelGoodReserve(ctx context.Context, code int, stockId int, value int) error
+	ReserveGood(ctx context.Context, code string, stockId string, value int) error
+	CancelGoodReserve(ctx context.Context, code string, stockId string, value int) error
 }
 
 type db struct {
@@ -43,225 +39,3 @@ func NewRepository(client dbclient.Client, logger *logger.Logger) Storage {
 var pgErr *pgconn.PgError
 var errQ error
 var mu sync.Mutex
-
-// CreateNewGood cоздает новый типа товара в базе данных
-func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
-	mu.Lock() // Для избежания "гонок данных" и коллизий используем mutex
-
-	exist, err := checkDbDublicate(strconv.Itoa(int(g.Code)), "goods", ctx, d.client) // Проверяем код нового продукта на дубликаты
-	if err != nil {
-		return fmt.Errorf("good being created is already in stock, error: %s", err)
-	}
-
-	if exist { // если код товара найден в БД - логируем и возвращаем ошибку
-		exErr := "specified new product code exists in stock"
-		d.logger.Error(exErr)
-		mu.Unlock()
-		return errors.New(exErr)
-	}
-
-	q := `insert into goods (name, size, value) values ($1, $2, $3)` // Создаем запрос по добавлению нового товара + проверяем на всевозможные ошибки и логируем
-	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
-
-	_, errQ = d.client.Exec(ctx, q, g.Name, g.Size, g.Value) // FAQ Метод Exec использовать для исполнения запросов, которые не возвращают данных update|delete|insert. Метод Query использовать для исполнения и возврата (select)
-
-	if errors.Is(errQ, pgErr) {
-		pgErr = errQ.(*pgconn.PgError)
-		newErr := fmt.Errorf(
-			fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
-				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
-		)
-		d.logger.Error(newErr)
-		mu.Unlock()
-		return newErr
-	}
-
-	mu.Unlock()
-	d.logger.Trace("new good has been successfully added to the database")
-
-	return nil
-}
-
-// CreateNewStock cоздает новый склад в базе данных. Функция аналогична CreateNewGood
-func (d *db) CreateNewStock(ctx context.Context, s entities.Stock) error {
-	mu.Lock()
-
-	exist, err := checkDbDublicate(s.Name, "stocks", ctx, d.client)
-	if err != nil {
-		return fmt.Errorf("good being created is already in stock, error: %s", err)
-	}
-
-	if exist {
-		exErr := "specified name of the stock being created already exists in the database"
-		d.logger.Error(exErr)
-		mu.Unlock()
-		return errors.New(exErr)
-	}
-
-	q := `insert into stocks (name, available) values ($1, $2)`
-	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
-
-	_, errQ = d.client.Exec(ctx, q, s.Name, s.Available)
-
-	if errors.Is(errQ, pgErr) {
-		pgErr = errQ.(*pgconn.PgError)
-		newErr := fmt.Errorf(
-			fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
-				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
-		)
-		d.logger.Error(newErr)
-		mu.Unlock()
-		return newErr
-	}
-	mu.Unlock()
-	d.logger.Trace("new stock has been successfully added to the database")
-
-	return nil
-}
-
-// Получить все товары со всех складов
-func (d *db) GetAllGoods(ctx context.Context) ([]entities.Good, error) {
-	q := `select code, name, size, value from goods`
-	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
-
-	rows, err := d.client.Query(ctx, q)
-	if err != nil {
-		d.logger.Fatalf("request execution error: %s", err)
-		return nil, err
-	}
-
-	goods := make([]entities.Good, 0)
-
-	for rows.Next() {
-		var g entities.Good
-
-		if err := rows.Scan(&g.Code, &g.Name, &g.Size, &g.Value); err != nil {
-			d.logger.Fatalf("func getAllGoods scan rows error: %s", err)
-			return nil, err
-		}
-
-		goods = append(goods, g)
-	}
-
-	if err := rows.Err(); err != nil {
-		d.logger.Fatalf("error checking failed: %s", err)
-		return nil, err
-	}
-
-	return goods, nil
-}
-
-// Получить товар по его коду
-func (d *db) GetGoodByCode(ctx context.Context, code string) (entities.Good, error) {
-	q := `select code, name, size, value from goods where code = %1`
-	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
-
-	var g entities.Good
-
-	if err := d.client.QueryRow(ctx, q, code).Scan(&g.Code, &g.Name, &g.Size, &g.Value); err != nil {
-		d.logger.Fatalf("request execution error: %s", err)
-		return entities.Good{}, nil
-	}
-	return g, nil
-}
-
-func (d *db) GetGoodsCountByStockId(ctx context.Context, stockId string) (count int64, err error) {
-	return 0, nil
-}
-
-// AddGood получает данные по товару и добавляет их на склад
-func (d *db) AddGood(ctx context.Context, code string, stockId string, value int, dynamic bool) error { // Параметр dynamic позволяет переносить товар с недоступного склада на доступный
-	if code == "" || stockId == "" || value == 0 {
-		d.logger.Fatal("code, id stock or value is empty")
-		return errors.New("code, id stock or value cannot be empty")
-	}
-
-	q := `select available from stocks where id::text = $1`
-	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
-
-	var s entities.Stock
-
-	mu.Lock()
-	if errQ = d.client.QueryRow(ctx, q, stockId).Scan(&s.Available); errQ != nil { // Получаем статус доступности склада
-		d.logger.Fatalf("func AddGood query for search stock error %s", errQ)
-		mu.Unlock()
-		return errQ
-	}
-
-	if s.Available { // Если склад доступен, обновляем value в таблице goods
-		q = `update goods set value = $1 where code = $2 and stock_id = $3`
-		d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
-
-		_, errQ = d.client.Exec(ctx, q, value, code, stockId)
-	} else {
-		switch dynamic {
-		case true: // Если был указан параметр dynamic => находим и возвращаем любой доступный склад (у которого есть товар с таким же кодом)
-			q = `select s.id from stocks s
-					inner join goods g on g.code = $1 and g.stock_id = $2
-				where s.id != $3 and s.available limit 1`
-
-			if errQ = d.client.QueryRow(ctx, q, code, stockId, stockId).Scan(&s.ID); errQ != nil {
-				d.logger.Fatalf("func AddGood query for get another stock (dynamic case) error %s", errQ)
-				mu.Unlock()
-				return errQ
-			}
-
-			q = `update goods set value = $1 where code = $2 and stock_id = $3`
-
-			_, errQ = d.client.Exec(ctx, q, value, code, s.ID) // Если запрос прошел все проверки и новый склад найден => Делаем обновление количества
-		case false:
-			return errors.New("failed to add goods to the stock")
-		}
-	}
-
-	if errors.Is(errQ, pgErr) {
-		pgErr = errQ.(*pgconn.PgError)
-		newErr := fmt.Errorf(
-			fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
-				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
-		)
-		d.logger.Error(newErr)
-		mu.Unlock()
-		return newErr
-	}
-
-	mu.Unlock()
-	return nil
-}
-
-func (d *db) ReserveGood(ctx context.Context, code int, stockId int, value int) error {
-	return nil
-}
-
-func (d *db) CancelGoodReserve(ctx context.Context, code int, stockId int, value int) error {
-	return nil
-}
-
-// Дополнительный функционал, реализующийся внутри пакета
-
-// checkDbDublicate проверяет на дубликаты в БД, при создании нового товара или скалада
-func checkDbDublicate(arg string, dbName string, ctx context.Context, c dbclient.Client) (bool, error) {
-	var query string = "select exists (select 1 from "
-	var exist bool
-
-	if arg == "" {
-		return false, errors.New("argument is empty")
-	}
-
-	switch dbName {
-	case "goods":
-		query = query + "goods where code::text"
-	case "stocks":
-		query = query + "stocks where name::text"
-	default:
-		return false, errors.New("database was not specified in the arguments of the function")
-	}
-
-	query = query + "=$1::text)"
-
-	if err := c.QueryRow(ctx, query, arg).Scan(&exist); err != nil {
-		return false, err
-	}
-
-	return exist, nil
-}
