@@ -28,5 +28,5 @@ func main() {
 		log.Fatalf("failed to connect PostgreSQL error: %s", err)
 	}
 
-	server.RunJRPC(ctx, ":8080", db.NewRepository(cl, log), log) // Запуск JRPC сервера
+	server.RunJRPC(ctx, db.NewRepository(cl, log), log) // Запуск JRPC сервера
 }
