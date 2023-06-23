@@ -10,6 +10,12 @@ import (
 	"github.com/gorilla/rpc/json"
 )
 
+type Service struct {
+	ctx context.Context
+	db  db.Storage
+	log *logger.Logger
+}
+
 func NewService(ctx context.Context, strg db.Storage, log *logger.Logger) *Service {
 	return &Service{
 		ctx: ctx,

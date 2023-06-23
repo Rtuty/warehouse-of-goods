@@ -75,6 +75,7 @@ func (d *db) ReservationGood(ctx context.Context, code string, stockId string, v
 	return nil
 }
 
+//todo
 func (d *db) CancelGoodReservation(ctx context.Context, code string, stockId string, value int64) error {
 	return nil
 }
