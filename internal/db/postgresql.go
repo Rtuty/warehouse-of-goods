@@ -20,7 +20,7 @@ type Storage interface {
 	AddGood(ctx context.Context, code string, stockId string, value int64, dynamic bool) error
 
 	ReservationGood(ctx context.Context, code string, stockId string, value int64) error
-	CancelGoodReservation(ctx context.Context, code string, stockId string, value int64) error
+	CancelGoodReservation(ctx context.Context, resId string) error
 }
 
 type db struct {

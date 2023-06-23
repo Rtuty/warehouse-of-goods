@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.stocks (
 	available bool NOT NULL DEFAULT true
 );
 
-CREATE TABLE IF NOT EXISTS public.res_cnt (
+CREATE TABLE IF NOT EXISTS public.res_cen (
 	id uuid NOT NULL DEFAULT uuid_generate_v4(),
 	good_code int4 NULL,
 	stock_id uuid NOT NULL,

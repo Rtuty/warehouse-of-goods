@@ -75,7 +75,60 @@ func (d *db) ReservationGood(ctx context.Context, code string, stockId string, v
 	return nil
 }
 
-//todo
-func (d *db) CancelGoodReservation(ctx context.Context, code string, stockId string, value int64) error {
+func (d *db) CancelGoodReservation(ctx context.Context, resId string) error {
+	if resId == "" {
+		return fmt.Errorf("resId is null")
+	}
+
+	t, err := d.client.Begin(ctx)
+	if err != nil {
+		d.logger.Fatal("couldn't open transaction")
+		return err
+	}
+
+	var q string = `select good_code, value, stock_id::text from res_cen rc where rc.id::text = $1`
+
+	var stock_id string
+	var good_code, res_vl int64
+
+	if errQ = t.QueryRow(ctx, q, resId).Scan(&good_code, &res_vl, &stock_id); errQ != nil { // Получаем данные с резервационного центра
+		d.logger.Fatalf("func CancelGoodReservation query for search stock error %s", errQ)
+		return errQ
+	}
+
+	chErr := make(chan error)
+
+	go func(errs chan error) {
+		for err := range errs {
+			if errors.Is(err, pgErr) {
+				pgErr = errQ.(*pgconn.PgError)
+				newErr := fmt.Errorf(
+					fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
+						pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
+				)
+				d.logger.Error(newErr)
+			}
+		}
+
+	}(chErr)
+
+	q = `delete from res_cen where id::text = $1` // Удаляем строку с резервационного центра
+	_, errQ = t.Exec(ctx, q, resId)
+	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
+
+	chErr <- errQ
+
+	q = `update goods set value = (select value from goods where code = $2) + $1 where code = $2`
+	_, errQ = t.Exec(ctx, q, res_vl, good_code)
+	d.logger.Trace(fmt.Sprintf("SQL Query: %s", utils.FormatQuery(q)))
+
+	chErr <- errQ
+
+	// Фиксируем транзакцию, если все окей
+	if err := t.Commit(ctx); err != nil {
+		d.logger.Errorf("failed to commit transaction: %s", err)
+		return err
+	}
+
 	return nil
 }

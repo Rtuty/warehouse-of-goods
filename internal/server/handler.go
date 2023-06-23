@@ -22,6 +22,7 @@ type GoodArgs struct {
 	Value   int64
 	StockId string
 	Dynamic bool
+	ResId   string
 }
 
 type StockArgs struct {
@@ -84,6 +85,15 @@ func (s *Service) AddGood(r *http.Request, args *GoodArgs, response *Response) e
 func (s *Service) ReservationGood(r *http.Request, args *GoodArgs, response *Response) error {
 	if err := s.db.ReservationGood(s.ctx, args.Code, args.StockId, args.Value); err != nil {
 		return fmt.Errorf("error when reservation: %s", err)
+	}
+
+	response.Message = "done"
+	return nil
+}
+
+func (s *Service) CancelGoodReservation(r *http.Request, args *GoodArgs, response *Response) error {
+	if err := s.db.CancelGoodReservation(s.ctx, args.ResId); err != nil {
+		return fmt.Errorf("error when cancel reservation: %s", err)
 	}
 
 	response.Message = "done"
