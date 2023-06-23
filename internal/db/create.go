@@ -20,13 +20,11 @@ func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
 
 	exist, err := checkDbDublicate(strconv.Itoa(int(g.Code)), "goods", ctx, t) // Проверяем код нового продукта на дубликаты
 	if err != nil {
-		t.Rollback(ctx)
 		return fmt.Errorf("good being created is already in stock, error: %s", err)
 	}
 
 	if exist { // если код товара найден в БД - логируем и возвращаем ошибку
 		exErr := "specified new product code exists in stock"
-		t.Rollback(ctx)
 		d.logger.Error(exErr)
 		return errors.New(exErr)
 	}
@@ -42,7 +40,6 @@ func (d *db) CreateNewGood(ctx context.Context, g entities.Good) error {
 			fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
 				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
 		)
-		t.Rollback(ctx)
 		d.logger.Error(newErr)
 		return newErr
 	}
@@ -66,13 +63,11 @@ func (d *db) CreateNewStock(ctx context.Context, s entities.Stock) error {
 
 	exist, err := checkDbDublicate(s.Name, "stocks", ctx, t)
 	if err != nil {
-		t.Rollback(ctx)
 		return fmt.Errorf("good being created is already in stock, error: %s", err)
 	}
 
 	if exist {
 		exErr := "specified name of the stock being created already exists in the database"
-		t.Rollback(ctx)
 		d.logger.Error(exErr)
 		return errors.New(exErr)
 	}
@@ -88,7 +83,6 @@ func (d *db) CreateNewStock(ctx context.Context, s entities.Stock) error {
 			fmt.Sprintf("sql error: %s,  Detail: %s, Where: %s, Code: %s, SQLState: %s",
 				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
 		)
-		t.Rollback(ctx)
 		d.logger.Error(newErr)
 		return newErr
 	}

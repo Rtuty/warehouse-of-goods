@@ -33,7 +33,6 @@ func checkDbDublicate(arg string, dbName string, ctx context.Context, c dbclient
 	query = query + "=$1::text)"
 
 	if err := t.QueryRow(ctx, query, arg).Scan(&exist); err != nil {
-		t.Rollback(ctx)
 		return false, err
 	}
 

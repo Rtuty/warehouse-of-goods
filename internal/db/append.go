@@ -42,7 +42,7 @@ func (d *db) AddGood(ctx context.Context, code string, stockId string, value int
 		_, errQ = t.Exec(ctx, q, value, code, stockId)
 	} else {
 		switch dynamic {
-		case true: // Если был указан параметр dynamic => находим и возвращаем любой доступный склад (у которого есть товар с таким же кодом)
+		case true: // Если был указан параметр dynamic => находим и возвращаем любой доступный склад
 			q = `select s.id from stocks s
 							inner join goods g on g.code::text = $1 and g.stock_id = $2
 						where s.id != $2 and s.available limit 1`
@@ -57,7 +57,6 @@ func (d *db) AddGood(ctx context.Context, code string, stockId string, value int
 
 			_, errQ = t.Exec(ctx, q, value, code, s.ID) // Если запрос прошел все проверки и новый склад найден => Делаем обновление количества
 		case false:
-			t.Rollback(ctx)
 			return errors.New("failed to add goods to the stock")
 		}
 	}
@@ -69,7 +68,6 @@ func (d *db) AddGood(ctx context.Context, code string, stockId string, value int
 				pgErr.Message, pgErr.Detail, pgErr.Where, pgErr.Code, pgErr.SQLState()),
 		)
 		d.logger.Error(newErr)
-		t.Rollback(ctx)
 
 		return newErr
 	}
